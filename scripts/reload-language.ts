@@ -1,20 +1,26 @@
 import {IDENTITY_KEY, appConfig} from 'appConfig';
 import {DEFAULT_ENGLISH_TRANSLATIONS} from 'core/utils';
-import {IUser} from 'superdesk-api';
+import {ISuperdeskGlobalConfig, IUser} from 'superdesk-api';
 
 const isTestEnvironment = typeof jasmine !== 'undefined';
 
-export function getUserLanguage(): string {
+/**
+ * `config` must be passed explicitly from `init.ts`. The `appConfig` module is evaluated there
+ * before `/client_config` is loaded, so it would not include server config like `default_language`.
+ * The initial language would then not match the one computed later by `reloadLanguage`,
+ * causing an infinite page reload loop.
+ */
+export function getUserLanguage(config: ISuperdeskGlobalConfig = appConfig): string {
     const user: IUser | null = JSON.parse(localStorage.getItem(IDENTITY_KEY));
 
     const language =
         user?.language
         ?? localStorage.getItem('LOGGED_OUT_LANGUAGE')
-        ?? appConfig.default_language
+        ?? config.default_language
         ?? window.navigator.language
         ?? 'en';
 
-    return appConfig.profileLanguages?.includes(language) ? language : 'en';
+    return config.profileLanguages?.includes(language) ? language : 'en';
 }
 
 function applyTranslations(translations) {
