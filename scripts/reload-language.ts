@@ -4,6 +4,46 @@ import {ISuperdeskGlobalConfig, IUser} from 'superdesk-api';
 
 const isTestEnvironment = typeof jasmine !== 'undefined';
 
+const normalizeLanguageCode = (language: string) => language.replace(/_/g, '-').toLowerCase();
+const getBaseLanguage = (language: string) => normalizeLanguageCode(language).split('-')[0];
+
+/**
+ * Profile languages are configured per instance, either with hyphens ("fr-CA")
+ * or underscores ("sv_SE"). Matches regardless of separator and case and returns the code
+ * exactly as configured, preferring the hyphenated form if both are configured.
+ */
+function findProfileLanguage(
+    profileLanguages: Array<string>,
+    predicate: (language: string) => boolean,
+): string | null {
+    const matches = profileLanguages.filter(predicate);
+
+    return matches.find((language) => language.includes('-')) ?? matches[0] ?? null;
+}
+
+function matchProfileLanguage(language: string, profileLanguages: Array<string>): string | null {
+    return findProfileLanguage(
+        profileLanguages,
+        (profileLanguage) => normalizeLanguageCode(profileLanguage) === normalizeLanguageCode(language),
+    );
+}
+
+/**
+ * Browsers report BCP 47 tags (e.g. "sv-SE", "fr-FR", "sv"), and profile languages
+ * are not always region specific (e.g. "sv_SE", "fr").
+ * Tries an exact match first, then the base language, then any variant of the base language.
+ */
+function matchBrowserLanguage(browserLanguage: string, profileLanguages: Array<string>): string | null {
+    const baseLanguage = getBaseLanguage(browserLanguage);
+
+    return matchProfileLanguage(browserLanguage, profileLanguages)
+        ?? matchProfileLanguage(baseLanguage, profileLanguages)
+        ?? findProfileLanguage(
+            profileLanguages,
+            (profileLanguage) => getBaseLanguage(profileLanguage) === baseLanguage,
+        );
+}
+
 /**
  * `config` must be passed explicitly from `init.ts`. The `appConfig` module is evaluated there
  * before `/client_config` is loaded, so it would not include server config like `default_language`.
@@ -12,15 +52,18 @@ const isTestEnvironment = typeof jasmine !== 'undefined';
  */
 export function getUserLanguage(config: ISuperdeskGlobalConfig = appConfig): string {
     const user: IUser | null = JSON.parse(localStorage.getItem(IDENTITY_KEY));
+    const browserLanguage = window.navigator.language == null
+        ? null
+        : matchBrowserLanguage(window.navigator.language, config.profileLanguages ?? []);
 
     const language =
         user?.language
         ?? localStorage.getItem('LOGGED_OUT_LANGUAGE')
         ?? config.default_language
-        ?? window.navigator.language
+        ?? browserLanguage
         ?? 'en';
 
-    return config.profileLanguages?.includes(language) ? language : 'en';
+    return matchProfileLanguage(language, config.profileLanguages ?? []) ?? 'en';
 }
 
 function applyTranslations(translations) {
