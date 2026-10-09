@@ -9,39 +9,30 @@ const getBaseLanguage = (language: string) => normalizeLanguageCode(language).sp
 
 /**
  * Profile languages are configured per instance, either with hyphens ("fr-CA")
- * or underscores ("sv_SE"). Matches regardless of separator and case and returns the code
- * exactly as configured, preferring the hyphenated form if both are configured.
+ * or underscores ("sv_SE"). Matches regardless of separator and case and returns the
+ * first match exactly as configured.
  */
-function findProfileLanguage(
-    profileLanguages: Array<string>,
-    predicate: (language: string) => boolean,
-): string | null {
-    const matches = profileLanguages.filter(predicate);
-
-    return matches.find((language) => language.includes('-')) ?? matches[0] ?? null;
-}
-
 function matchProfileLanguage(language: string, profileLanguages: Array<string>): string | null {
-    return findProfileLanguage(
-        profileLanguages,
+    return profileLanguages.find(
         (profileLanguage) => normalizeLanguageCode(profileLanguage) === normalizeLanguageCode(language),
-    );
+    ) ?? null;
 }
 
 /**
  * Browsers report BCP 47 tags (e.g. "sv-SE", "fr-FR", "sv"), and profile languages
  * are not always region specific (e.g. "sv_SE", "fr").
- * Tries an exact match first, then the base language, then any variant of the base language.
+ * Tries an exact match first, then the base language, then a regional variant of the base language
+ * if exactly one is configured (e.g. "sv" -> "sv_SE", but no guessing between "zh_CN" and "zh_TW").
  */
 function matchBrowserLanguage(browserLanguage: string, profileLanguages: Array<string>): string | null {
     const baseLanguage = getBaseLanguage(browserLanguage);
+    const variants = profileLanguages.filter(
+        (profileLanguage) => getBaseLanguage(profileLanguage) === baseLanguage,
+    );
 
     return matchProfileLanguage(browserLanguage, profileLanguages)
         ?? matchProfileLanguage(baseLanguage, profileLanguages)
-        ?? findProfileLanguage(
-            profileLanguages,
-            (profileLanguage) => getBaseLanguage(profileLanguage) === baseLanguage,
-        );
+        ?? (variants.length === 1 ? variants[0] : null);
 }
 
 /**
